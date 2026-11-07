@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -26,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tayseer.app.data.AttendanceStatus
 import com.tayseer.app.data.Student
+import com.tayseer.app.data.UserRole
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -47,6 +47,12 @@ fun MainScreen(viewModel: MainViewModel) {
     val currentDate by viewModel.currentDate.collectAsState()
     val currentUserRole by viewModel.currentUserRole.collectAsState()
 
+    val roleName = when (currentUserRole) {
+        UserRole.ADMIN -> "الإدارة المدرسية"
+        UserRole.TEACHER -> "معلم"
+        UserRole.PARENT -> "ولي أمر"
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -59,7 +65,7 @@ fun MainScreen(viewModel: MainViewModel) {
                             color = Color.White
                         )
                         Text(
-                            text = "التاريخ: $currentDate | الدور: ${currentUserRole.labelAr}",
+                            text = "التاريخ: $currentDate | الدور: $roleName",
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.8f)
                         )
@@ -176,7 +182,7 @@ fun StudentCard(
                 .padding(12.dp)
         ) {
             Text(
-                text = student.fullName,
+                text = student.name,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -188,16 +194,15 @@ fun StudentCard(
                 modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
             )
 
-            // شبكة الحالات الست كاملة
             val row1 = listOf(
-                AttendanceStatus.PRESENT to Color(0xFF2E7D32),
-                AttendanceStatus.ABSENT to Color(0xFFC62828),
-                AttendanceStatus.EXCUSED to Color(0xFF1565C0)
+                Triple(AttendanceStatus.PRESENT, "حاضر", Color(0xFF2E7D32)),
+                Triple(AttendanceStatus.ABSENT, "غائب", Color(0xFFC62828)),
+                Triple(AttendanceStatus.EXCUSED, "مستأذن", Color(0xFF1565C0))
             )
             val row2 = listOf(
-                AttendanceStatus.LATE to Color(0xFFEF6C00),
-                AttendanceStatus.ABSENT_WITH_EXCUSE to Color(0xFF6A1B9A),
-                AttendanceStatus.ESCAPED to Color(0xFF424242)
+                Triple(AttendanceStatus.LATE, "متأخر", Color(0xFFEF6C00)),
+                Triple(AttendanceStatus.ABSENT_WITH_EXCUSE, "غائب بعذر", Color(0xFF6A1B9A)),
+                Triple(AttendanceStatus.ESCAPED, "هارب", Color(0xFF424242))
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -205,9 +210,9 @@ fun StudentCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    row1.forEach { (status, activeColor) ->
+                    row1.forEach { (status, label, activeColor) ->
                         StatusButton(
-                            status = status,
+                            label = label,
                             isSelected = currentStatus == status,
                             activeColor = activeColor,
                             modifier = Modifier.weight(1f),
@@ -219,9 +224,9 @@ fun StudentCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    row2.forEach { (status, activeColor) ->
+                    row2.forEach { (status, label, activeColor) ->
                         StatusButton(
-                            status = status,
+                            label = label,
                             isSelected = currentStatus == status,
                             activeColor = activeColor,
                             modifier = Modifier.weight(1f),
@@ -236,7 +241,7 @@ fun StudentCard(
 
 @Composable
 fun StatusButton(
-    status: AttendanceStatus,
+    label: String,
     isSelected: Boolean,
     activeColor: Color,
     modifier: Modifier = Modifier,
@@ -251,7 +256,7 @@ fun StatusButton(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = status.labelAr,
+            text = label,
             fontSize = 12.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
             color = if (isSelected) Color.White else Color.Black
