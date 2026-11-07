@@ -25,7 +25,7 @@ jobs:
         gradle-version: '8.4'
 
     - name: Build Debug APK
-      run: gradle assembleDebug --stacktrace
+      run: gradle assembleDebug --stacktrace --info
 
     - name: Upload Tayseer APK
       uses: actions/upload-artifact@v4
