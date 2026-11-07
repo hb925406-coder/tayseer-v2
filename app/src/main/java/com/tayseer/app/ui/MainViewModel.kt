@@ -16,7 +16,6 @@ import com.tayseer.app.util.ExcelImporter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -31,20 +30,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val pendingAlerts: StateFlow<List<AttendanceRecord>>
     val customEvaluations: StateFlow<List<CustomEvaluation>>
 
-    private val _currentUserRole = MutableStateFlow<UserRole>(UserRole.ADMIN)
-    val currentUserRole: StateFlow<UserRole> get() = _currentUserRole.asStateFlow()
-
-    private val _currentDate = MutableStateFlow<String>(getTodayDateString())
-    val currentDate: StateFlow<String> get() = _currentDate.asStateFlow()
-
-    private val _selectedGrade = MutableStateFlow<String>("الصف الأول")
-    val selectedGrade: StateFlow<String> get() = _selectedGrade.asStateFlow()
-
-    private val _selectedSection = MutableStateFlow<String>("أ")
-    val selectedSection: StateFlow<String> get() = _selectedSection.asStateFlow()
-
-    private val _dailyAttendance = MutableStateFlow>(emptyMap<Long, AttendanceStatus>())
-    val dailyAttendance: StateFlow> get() = _dailyAttendance.asStateFlow()
+    val currentUserRole: MutableStateFlow<UserRole> = MutableStateFlow(UserRole.ADMIN)
+    val currentDate: MutableStateFlow<String> = MutableStateFlow(getTodayDateString())
+    val selectedGrade: MutableStateFlow<String> = MutableStateFlow("الصف الأول")
+    val selectedSection: MutableStateFlow<String> = MutableStateFlow("أ")
+    val dailyAttendance: MutableStateFlow> = MutableStateFlow(emptyMap())
 
     init {
         val database = AppDatabase.getDatabase(application, viewModelScope)
@@ -54,40 +44,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList<Student>()
+                initialValue = emptyList()
             )
 
         pendingAlerts = repository.pendingAlerts
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList<AttendanceRecord>()
+                initialValue = emptyList()
             )
 
         customEvaluations = repository.allCustomEvaluations
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList<CustomEvaluation>()
+                initialValue = emptyList()
             )
 
         loadAttendanceForCurrentDate()
     }
 
     fun setUserRole(role: UserRole) {
-        _currentUserRole.value = role
+        currentUserRole.value = role
     }
 
     fun setGradeAndSection(grade: String, section: String) {
-        _selectedGrade.value = grade
-        _selectedSection.value = section
+        selectedGrade.value = grade
+        selectedSection.value = section
     }
 
     private fun loadAttendanceForCurrentDate() {
         viewModelScope.launch {
-            repository.getAttendanceByDate(_currentDate.value).collect { records ->
+            repository.getAttendanceByDate(currentDate.value).collect { records ->
                 val map = records.associate { it.studentId to it.statusEnum }
-                _dailyAttendance.value = map
+                dailyAttendance.value = map
             }
         }
     }
@@ -97,15 +87,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val isAlert = (status == AttendanceStatus.ABSENT || status == AttendanceStatus.ESCAPED || status == AttendanceStatus.LATE)
             val record = AttendanceRecord(
                 studentId = studentId,
-                date = _currentDate.value,
+                date = currentDate.value,
                 statusEnum = status,
                 reasonNote = note,
                 isFollowedUp = !isAlert
             )
             repository.recordAttendance(record)
-            val currentMap = _dailyAttendance.value.toMutableMap()
+            val currentMap = dailyAttendance.value.toMutableMap()
             currentMap[studentId] = status
-            _dailyAttendance.value = currentMap
+            dailyAttendance.value = currentMap
         }
     }
 
@@ -114,14 +104,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val records = students.map { student ->
                 AttendanceRecord(
                     studentId = student.id,
-                    date = _currentDate.value,
+                    date = currentDate.value,
                     statusEnum = AttendanceStatus.PRESENT,
                     isFollowedUp = true
                 )
             }
             repository.recordAttendanceBulk(records)
             val newMap = students.associate { it.id to AttendanceStatus.PRESENT }
-            _dailyAttendance.value = newMap
+            dailyAttendance.value = newMap
         }
     }
 
@@ -135,7 +125,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val record = EvaluationRecord(
                 studentId = studentId,
-                date = _currentDate.value,
+                date = currentDate.value,
                 title = title,
                 scoreType = scoreType,
                 note = note
@@ -155,8 +145,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val parsedStudents = ExcelImporter.parseFile(
                 getApplication(),
                 uri,
-                _selectedGrade.value,
-                _selectedSection.value
+                selectedGrade.value,
+                selectedSection.value
             )
             if (parsedStudents.isNotEmpty()) {
                 repository.insertStudents(parsedStudents)
