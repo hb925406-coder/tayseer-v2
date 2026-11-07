@@ -4,7 +4,14 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.tayseer.app.data.*
+import com.tayseer.app.data.AppDatabase
+import com.tayseer.app.data.AttendanceRecord
+import com.tayseer.app.data.AttendanceStatus
+import com.tayseer.app.data.CustomEvaluation
+import com.tayseer.app.data.EvaluationRecord
+import com.tayseer.app.data.Student
+import com.tayseer.app.data.TayseerRepository
+import com.tayseer.app.data.UserRole
 import com.tayseer.app.util.ExcelImporter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,33 +31,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val pendingAlerts: StateFlow<List<AttendanceRecord>>
     val customEvaluations: StateFlow<List<CustomEvaluation>>
 
-    private val _currentUserRole = MutableStateFlow(UserRole.ADMIN)
-    val currentUserRole: StateFlow<UserRole> = _currentUserRole.asStateFlow()
+    private val _currentUserRole = MutableStateFlow<UserRole>(UserRole.ADMIN)
+    val currentUserRole: StateFlow<UserRole> get() = _currentUserRole.asStateFlow()
 
-    private val _currentDate = MutableStateFlow(getTodayDateString())
-    val currentDate: StateFlow<String> = _currentDate.asStateFlow()
+    private val _currentDate = MutableStateFlow<String>(getTodayDateString())
+    val currentDate: StateFlow<String> get() = _currentDate.asStateFlow()
 
-    private val _selectedGrade = MutableStateFlow("الصف الأول")
-    val selectedGrade: StateFlow<String> = _selectedGrade.asStateFlow()
+    private val _selectedGrade = MutableStateFlow<String>("الصف الأول")
+    val selectedGrade: StateFlow<String> get() = _selectedGrade.asStateFlow()
 
-    private val _selectedSection = MutableStateFlow("أ")
-    val selectedSection: StateFlow<String> = _selectedSection.asStateFlow()
+    private val _selectedSection = MutableStateFlow<String>("أ")
+    val selectedSection: StateFlow<String> get() = _selectedSection.asStateFlow()
 
-    private val _dailyAttendance = MutableStateFlow>(emptyMap())
-    val dailyAttendance: StateFlow> = _dailyAttendance.asStateFlow()
+    private val _dailyAttendance = MutableStateFlow>(emptyMap<Long, AttendanceStatus>())
+    val dailyAttendance: StateFlow> get() = _dailyAttendance.asStateFlow()
 
     init {
         val database = AppDatabase.getDatabase(application, viewModelScope)
         repository = TayseerRepository(database)
 
         allStudents = repository.allStudents
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList<Student>()
+            )
 
         pendingAlerts = repository.pendingAlerts
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList<AttendanceRecord>()
+            )
 
         customEvaluations = repository.allCustomEvaluations
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList<CustomEvaluation>()
+            )
 
         loadAttendanceForCurrentDate()
     }
