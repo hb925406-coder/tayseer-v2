@@ -24,37 +24,43 @@ import java.util.Locale
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val database: AppDatabase = AppDatabase.getDatabase(application, viewModelScope)
-    private val repository: TayseerRepository = TayseerRepository(database)
+    private val repository: TayseerRepository
 
-    val currentUserRole: MutableStateFlow<UserRole> = MutableStateFlow(UserRole.ADMIN)
-    val currentDate: MutableStateFlow<String> = MutableStateFlow(getTodayDateString())
-    val selectedGrade: MutableStateFlow<String> = MutableStateFlow("الصف الأول")
-    val selectedSection: MutableStateFlow<String> = MutableStateFlow("أ")
-    val dailyAttendance: MutableStateFlow> = MutableStateFlow(emptyMap())
+    val currentUserRole = MutableStateFlow(UserRole.ADMIN)
+    val currentDate = MutableStateFlow(getTodayDateString())
+    val selectedGrade = MutableStateFlow("الصف الأول")
+    val selectedSection = MutableStateFlow("أ")
+    val dailyAttendance = MutableStateFlow(mapOf<Long, AttendanceStatus>())
 
-    val allStudents: StateFlow<List<Student>> = repository.allStudents
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    val pendingAlerts: StateFlow<List<AttendanceRecord>> = repository.pendingAlerts
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    val customEvaluations: StateFlow<List<CustomEvaluation>> = repository.allCustomEvaluations
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    val allStudents: StateFlow<List<Student>>
+    val pendingAlerts: StateFlow<List<AttendanceRecord>>
+    val customEvaluations: StateFlow<List<CustomEvaluation>>
 
     init {
+        val database = AppDatabase.getDatabase(application, viewModelScope)
+        repository = TayseerRepository(database)
+
+        allStudents = repository.allStudents
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
+
+        pendingAlerts = repository.pendingAlerts
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
+
+        customEvaluations = repository.allCustomEvaluations
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
+
         loadAttendanceForCurrentDate()
     }
 
@@ -87,9 +93,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isFollowedUp = !isAlert
             )
             repository.recordAttendance(record)
-            val newMap = dailyAttendance.value.toMutableMap()
-            newMap[studentId] = status
-            dailyAttendance.value = newMap
+            val currentMap = dailyAttendance.value.toMutableMap()
+            currentMap[studentId] = status
+            dailyAttendance.value = currentMap
         }
     }
 
