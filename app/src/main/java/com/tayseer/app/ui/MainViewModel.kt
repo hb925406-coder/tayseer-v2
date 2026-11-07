@@ -24,14 +24,14 @@ import java.util.Locale
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val database = AppDatabase.getDatabase(application, viewModelScope)
-    private val repository = TayseerRepository(database)
+    private val database: AppDatabase = AppDatabase.getDatabase(application, viewModelScope)
+    private val repository: TayseerRepository = TayseerRepository(database)
 
-    val currentUserRole = MutableStateFlow(UserRole.ADMIN)
-    val currentDate = MutableStateFlow(getTodayDateString())
-    val selectedGrade = MutableStateFlow("الصف الأول")
-    val selectedSection = MutableStateFlow("أ")
-    val dailyAttendance = MutableStateFlow>(emptyMap())
+    val currentUserRole: MutableStateFlow<UserRole> = MutableStateFlow(UserRole.ADMIN)
+    val currentDate: MutableStateFlow<String> = MutableStateFlow(getTodayDateString())
+    val selectedGrade: MutableStateFlow<String> = MutableStateFlow("الصف الأول")
+    val selectedSection: MutableStateFlow<String> = MutableStateFlow("أ")
+    val dailyAttendance: MutableStateFlow> = MutableStateFlow(emptyMap())
 
     val allStudents: StateFlow<List<Student>> = repository.allStudents
         .stateIn(
@@ -87,9 +87,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isFollowedUp = !isAlert
             )
             repository.recordAttendance(record)
-            val currentMap = dailyAttendance.value.toMutableMap()
-            currentMap[studentId] = status
-            dailyAttendance.value = currentMap
+            val newMap = dailyAttendance.value.toMutableMap()
+            newMap[studentId] = status
+            dailyAttendance.value = newMap
         }
     }
 
