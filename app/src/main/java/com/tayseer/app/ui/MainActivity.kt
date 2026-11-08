@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
@@ -23,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tayseer.app.data.AttendanceRecord
 import com.tayseer.app.data.AttendanceStatus
 import com.tayseer.app.data.Student
 import com.tayseer.app.data.UserRole
@@ -44,6 +46,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     var selectedTab by remember { mutableStateOf(0) }
+    var showAddStudentDialog by remember { mutableStateOf(false) }
+
     val currentDate by viewModel.currentDate.collectAsState()
     val currentUserRole by viewModel.currentUserRole.collectAsState()
 
@@ -74,6 +78,17 @@ fun MainScreen(viewModel: MainViewModel) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1B5E20))
             )
         },
+        floatingActionButton = {
+            if (selectedTab == 0 || selectedTab == 1) {
+                FloatingActionButton(
+                    onClick = { showAddStudentDialog = true },
+                    containerColor = Color(0xFF1B5E20),
+                    contentColor = Color.White
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "إضافة طالب")
+                }
+            }
+        },
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(
@@ -100,9 +115,25 @@ fun MainScreen(viewModel: MainViewModel) {
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
                 0 -> AttendanceTab(viewModel)
-                1 -> CenterMessage("شاشة إدارة وتصنيف الطلاب")
-                2 -> CenterMessage("شاشة متابعة الأعذار والتنبيهات")
+                1 -> StudentsTab(viewModel)
+                2 -> FollowUpTab(viewModel)
             }
+        }
+
+        if (showAddStudentDialog) {
+            AddStudentDialog(
+                onDismiss = { showAddStudentDialog = false },
+                onConfirm = { name, grade, section ->
+                    viewModel.addStudent(
+                        Student(
+                            name = name,
+                            grade = grade,
+                            section = section
+                        )
+                    )
+                    showAddStudentDialog = false
+                }
+            )
         }
     }
 }
@@ -146,19 +177,140 @@ fun AttendanceTab(viewModel: MainViewModel) {
             )
         }
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(students, key = { it.id }) { student ->
-                val currentStatus = dailyAttendance[student.id] ?: AttendanceStatus.PRESENT
-                StudentCard(
-                    student = student,
-                    currentStatus = currentStatus,
-                    onStatusSelected = { status ->
-                        viewModel.updateStudentAttendance(student.id, status)
+        if (students.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("لا يوجد طلاب مسجلين، اضغط على زر (+) لإضافة طالب", color = Color.Gray, fontSize = 14.sp)
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(students, key = { it.id }) { student ->
+                    val currentStatus = dailyAttendance[student.id] ?: AttendanceStatus.PRESENT
+                    StudentCard(
+                        student = student,
+                        currentStatus = currentStatus,
+                        onStatusSelected = { status ->
+                            viewModel.updateStudentAttendance(student.id, status)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StudentsTab(viewModel: MainViewModel) {
+    val students by viewModel.allStudents.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "دليل الطلاب المسجلين (${students.size} طالب)",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        if (students.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("لم يتم إضافة أي طالب بعد", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(students, key = { it.id }) { student ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(student.name, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text("${student.grade} - شعبة ${student.section}", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Text("رقم القيد: #${student.id}", fontSize = 11.sp, color = Color.DarkGray)
+                        }
                     }
-                )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FollowUpTab(viewModel: MainViewModel) {
+    val pendingAlerts by viewModel.pendingAlerts.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "سجل التنبيهات والأعذار (${pendingAlerts.size})",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        if (pendingAlerts.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("لا توجد حالات غياب أو تأخير تتطلب المتابعة حالياً", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(pendingAlerts, key = { it.id }) { record ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "حالة رصد: ${record.statusEnum.name} - تاريخ: ${record.date}",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE65100)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.resolveAlert(record.id, "واتساب", "تم التواصل مع ولي الأمر") },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text("توثيق واتساب", fontSize = 11.sp)
+                                }
+                                Button(
+                                    onClick = { viewModel.resolveAlert(record.id, "ورقة عذر", "تم استلام عذر رسمي") },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0)),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text("ورقة عذر", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -265,11 +417,58 @@ fun StatusButton(
 }
 
 @Composable
-fun CenterMessage(text: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = text, fontSize = 16.sp, color = Color.Gray)
-    }
+fun AddStudentDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, grade: String, section: String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var grade by remember { mutableStateOf("الصف الأول") }
+    var section by remember { mutableStateOf("أ") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("إضافة طالب جديد", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("اسم الطالب الرباعي") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = grade,
+                    onValueChange = { grade = it },
+                    label = { Text("الصف / المستوى") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = section,
+                    onValueChange = { section = it },
+                    label = { Text("الشعبة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (name.isNotBlank()) {
+                        onConfirm(name.trim(), grade.trim(), section.trim())
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+            ) {
+                Text("إضافة")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
 }
