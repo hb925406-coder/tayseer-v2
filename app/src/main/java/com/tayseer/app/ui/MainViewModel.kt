@@ -37,11 +37,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val pendingAlerts: StateFlow<List<AttendanceRecord>> = attendanceDao.getPendingAlerts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val todayEvaluations: StateFlow<List<EvaluationRecord>> = evaluationDao.getEvaluationsByDate(dateFormat.format(Date()))
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _todayEvaluations = MutableStateFlow<List<EvaluationRecord>>(emptyList())
+    val todayEvaluations: StateFlow<List<EvaluationRecord>> = _todayEvaluations.asStateFlow()
 
     private val _dailyAttendance = MutableStateFlow>(emptyMap())
     val dailyAttendance: StateFlow> = _dailyAttendance.asStateFlow()
+
+    init {
+        loadTodayEvaluations()
+    }
+
+    private fun loadTodayEvaluations() {
+        viewModelScope.launch {
+            evaluationDao.getEvaluationsByDate(currentDate.value).collect { list ->
+                _todayEvaluations.value = list
+            }
+        }
+    }
 
     fun updateStudentAttendance(studentId: Long, status: AttendanceStatus) {
         viewModelScope.launch {
