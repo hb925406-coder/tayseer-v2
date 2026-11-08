@@ -1,169 +1,97 @@
 package com.tayseer.app.ui
 
 import android.app.Application
-import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.tayseer.app.data.AppDatabase
-import com.tayseer.app.data.AttendanceRecord
-import com.tayseer.app.data.AttendanceStatus
-import com.tayseer.app.data.CustomEvaluation
-import com.tayseer.app.data.EvaluationRecord
-import com.tayseer.app.data.Student
-import com.tayseer.app.data.TayseerRepository
-import com.tayseer.app.data.UserRole
-import com.tayseer.app.util.ExcelImporter
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import com.tayseer.app.data.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+    private val database = AppDatabase.getDatabase(application)
+    private val studentDao = database.studentDao()
+    private val attendanceDao = database.attendanceDao()
+    private val evaluationDao = database.evaluationDao()
 
-    private val repository: TayseerRepository
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val currentDate = MutableStateFlow(dateFormat.format(Date()))
 
     val currentUserRole = MutableStateFlow(UserRole.ADMIN)
-    val currentDate = MutableStateFlow(getTodayDateString())
-    val selectedGrade = MutableStateFlow("الصف الأول")
-    val selectedSection = MutableStateFlow("أ")
-    val dailyAttendance = MutableStateFlow(mapOf<Long, AttendanceStatus>())
 
-    val allStudents: StateFlow<List<Student>>
-    val pendingAlerts: StateFlow<List<AttendanceRecord>>
-    val customEvaluations: StateFlow<List<CustomEvaluation>>
+    val allStudents: StateFlow<List<Student>> = studentDao.getAllStudents()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    init {
-        val database = AppDatabase.getDatabase(application, viewModelScope)
-        repository = TayseerRepository(database)
+    val pendingAlerts: StateFlow<List<AttendanceRecord>> = attendanceDao.getPendingAlerts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-        allStudents = repository.allStudents
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList()
-            )
+    val todayEvaluations: StateFlow<List<EvaluationRecord>> = currentDate
+        .flatMapLatest { date -> evaluationDao.getEvaluationsByDate(date) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-        pendingAlerts = repository.pendingAlerts
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList()
-            )
+    private val _dailyAttendance = MutableStateFlow>(emptyMap())
+    val dailyAttendance: StateFlow> = _dailyAttendance.asStateFlow()
 
-        customEvaluations = repository.allCustomEvaluations
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                initialValue = emptyList()
-            )
-
-        loadAttendanceForCurrentDate()
-    }
-
-    fun setUserRole(role: UserRole) {
-        currentUserRole.value = role
-    }
-
-    fun setGradeAndSection(grade: String, section: String) {
-        selectedGrade.value = grade
-        selectedSection.value = section
-    }
-
-    private fun loadAttendanceForCurrentDate() {
+    fun updateStudentAttendance(studentId: Long, status: AttendanceStatus) {
         viewModelScope.launch {
-            repository.getAttendanceByDate(currentDate.value).collect { records ->
-                val map = records.associate { it.studentId to it.statusEnum }
-                dailyAttendance.value = map
+            _dailyAttendance.value = _dailyAttendance.value.toMutableMap().apply {
+                put(studentId, status)
             }
-        }
-    }
-
-    fun updateStudentAttendance(studentId: Long, status: AttendanceStatus, note: String = "") {
-        viewModelScope.launch {
-            val isAlert = (status == AttendanceStatus.ABSENT || status == AttendanceStatus.ESCAPED || status == AttendanceStatus.LATE)
             val record = AttendanceRecord(
                 studentId = studentId,
                 date = currentDate.value,
                 statusEnum = status,
-                reasonNote = note,
-                isFollowedUp = !isAlert
+                needsFollowUp = (status == AttendanceStatus.ABSENT || status == AttendanceStatus.LATE || status == AttendanceStatus.ESCAPED)
             )
-            repository.recordAttendance(record)
-            val currentMap = dailyAttendance.value.toMutableMap()
-            currentMap[studentId] = status
-            dailyAttendance.value = currentMap
+            attendanceDao.insertAttendance(record)
         }
     }
 
     fun markAllPresent(students: List<Student>) {
         viewModelScope.launch {
-            val records = students.map { student ->
-                AttendanceRecord(
+            val updatedMap = _dailyAttendance.value.toMutableMap()
+            students.forEach { student ->
+                updatedMap[student.id] = AttendanceStatus.PRESENT
+                val record = AttendanceRecord(
                     studentId = student.id,
                     date = currentDate.value,
                     statusEnum = AttendanceStatus.PRESENT,
-                    isFollowedUp = true
+                    needsFollowUp = false
                 )
+                attendanceDao.insertAttendance(record)
             }
-            repository.recordAttendanceBulk(records)
-            val newMap = students.associate { it.id to AttendanceStatus.PRESENT }
-            dailyAttendance.value = newMap
-        }
-    }
-
-    fun resolveAlert(recordId: Long, method: String, note: String) {
-        viewModelScope.launch {
-            repository.resolveFollowUp(recordId, method, note)
-        }
-    }
-
-    fun addEvaluation(studentId: Long, title: String, scoreType: String, note: String = "") {
-        viewModelScope.launch {
-            val record = EvaluationRecord(
-                studentId = studentId,
-                date = currentDate.value,
-                title = title,
-                scoreType = scoreType,
-                note = note
-            )
-            repository.addEvaluation(record)
-        }
-    }
-
-    fun addCustomEvaluation(title: String, isPositive: Boolean) {
-        viewModelScope.launch {
-            repository.addCustomEvaluation(CustomEvaluation(title = title, isPositive = isPositive))
-        }
-    }
-
-    fun importStudentsFromFile(uri: Uri) {
-        viewModelScope.launch {
-            val parsedStudents = ExcelImporter.parseFile(
-                getApplication(),
-                uri,
-                selectedGrade.value,
-                selectedSection.value
-            )
-            if (parsedStudents.isNotEmpty()) {
-                repository.insertStudents(parsedStudents)
-            }
+            _dailyAttendance.value = updatedMap
         }
     }
 
     fun addStudent(student: Student) {
         viewModelScope.launch {
-            repository.insertStudent(student)
+            studentDao.insertStudent(student)
         }
     }
 
-    companion object {
-        fun getTodayDateString(): String {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            return sdf.format(Date())
+    fun addEvaluation(studentId: Long, type: EvaluationType, note: String = "") {
+        viewModelScope.launch {
+            val evaluation = EvaluationRecord(
+                studentId = studentId,
+                date = currentDate.value,
+                type = type,
+                note = note
+            )
+            evaluationDao.insertEvaluation(evaluation)
+        }
+    }
+
+    fun deleteEvaluation(evaluation: EvaluationRecord) {
+        viewModelScope.launch {
+            evaluationDao.deleteEvaluation(evaluation)
+        }
+    }
+
+    fun resolveAlert(recordId: Long, excuseType: String, note: String) {
+        viewModelScope.launch {
+            attendanceDao.resolveAlert(recordId, excuseType, note)
         }
     }
 }
