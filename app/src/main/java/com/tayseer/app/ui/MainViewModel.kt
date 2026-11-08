@@ -3,11 +3,22 @@ package com.tayseer.app.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.tayseer.app.data.*
-import kotlinx.coroutines.flow.*
+import com.tayseer.app.data.AppDatabase
+import com.tayseer.app.data.AttendanceRecord
+import com.tayseer.app.data.AttendanceStatus
+import com.tayseer.app.data.EvaluationRecord
+import com.tayseer.app.data.EvaluationType
+import com.tayseer.app.data.Student
+import com.tayseer.app.data.UserRole
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application)
@@ -26,8 +37,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val pendingAlerts: StateFlow<List<AttendanceRecord>> = attendanceDao.getPendingAlerts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val todayEvaluations: StateFlow<List<EvaluationRecord>> = currentDate
-        .flatMapLatest { date -> evaluationDao.getEvaluationsByDate(date) }
+    val todayEvaluations: StateFlow<List<EvaluationRecord>> = evaluationDao.getEvaluationsByDate(dateFormat.format(Date()))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _dailyAttendance = MutableStateFlow>(emptyMap())
