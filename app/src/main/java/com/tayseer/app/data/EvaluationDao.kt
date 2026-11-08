@@ -1,19 +1,36 @@
 package com.tayseer.app.data
 
-import androidx.room.*
-import kotlinx.coroutines.flow.Flow
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
 
-@Dao
-interface EvaluationDao {
-    @Query("SELECT * FROM evaluation_records WHERE studentId = :studentId ORDER BY date DESC")
-    fun getEvaluationsForStudent(studentId: Long): Flow<List<EvaluationRecord>>
+@Database(
+    entities = [Student::class, AttendanceRecord::class, EvaluationRecord::class],
+    version = 2,
+    exportSchema = false
+)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun studentDao(): StudentDao
+    abstract fun attendanceDao(): AttendanceDao
+    abstract fun evaluationDao(): EvaluationDao
 
-    @Query("SELECT * FROM evaluation_records WHERE studentId = :studentId")
-    suspend fun getEvaluationsForStudentSync(studentId: Long): List<EvaluationRecord>
+    companion object {
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertEvaluation(evaluation: EvaluationRecord): Long
-
-    @Delete
-    suspend fun deleteEvaluation(evaluation: EvaluationRecord)
+        fun getDatabase(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "tayseer_database"
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
 }
